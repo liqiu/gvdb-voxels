@@ -1671,7 +1671,7 @@ void nverror ()
 	exit(-1);
 }
 
-bool getFileLocation ( const char* filename, char* outpath )
+bool getFileLocation (  char* filename, char* outpath )
 {
 	std::vector<std::string> paths;
 	paths.push_back ("./");
@@ -1681,7 +1681,7 @@ bool getFileLocation ( const char* filename, char* outpath )
 	return result;
 }
 
-bool getFileLocation ( const char* filename, char* outpath, std::vector<std::string> searchPaths )
+bool getFileLocation ( char* filename, char* outpath, std::vector<std::string> searchPaths )
 {
 	bool found = false;
 	FILE* fp = fopen( filename, "rb" );

@@ -59,12 +59,12 @@ int main (int argc, char* argv)
 
 	// Load VBX
 	char scnpath[1024];
-	if ( !gvdb.FindFile ( "explosion.vbx", scnpath ) ) {
+	if ( !gvdb.FindFile ( "wdas_cloud_eighth.vdb", scnpath ) ) {
 		printf ( "Cannot find vbx files.\n" );
 		exit(-1);
 	}
 	printf ( "Loading VBX. %s\n", scnpath );
-	gvdb.LoadVBX ( scnpath );	
+	gvdb.LoadVDB ( scnpath );	
 	
 	gvdb.getScene()->SetVolumeRange ( 0.01f, 1.0f, 0.0f );
 

@@ -5,22 +5,24 @@
 unset(CUDPP_FOUND CACHE)
 unset(CUDPP_INCLUDE_DIR CACHE)
 
-if ( NOT DEFINED CUDPP_ROOT_DIR )
+if ( NOT DEFINED CUDPP_ROOT_DIR AND NOT DEFINED CUDPP_SOURCE_DIR)
   if (WIN32)
-    get_filename_component ( BASEDIR "${CMAKE_MODULE_PATH}/../../shared_cudpp" REALPATH )
+    get_filename_component ( BASEDIR "${CMAKE_MODULE_PATH} /../../../build/shared_cudpp" REALPATH )
+	get_filename_component ( SOURCEDIR "${CMAKE_MODULE_PATH} /../../shared_cudpp" REALPATH )
   else()
     get_filename_component ( BASEDIR "/usr/local/cudpp/" REALPATH )
   endif()
   set ( CUDPP_ROOT_DIR ${BASEDIR} CACHE PATH "Location of cuDPP library" FORCE)
+  set ( CUDPP_SOURCE_DIR ${SOURCEDIR} CACHE PATH "Location of cuDPP source" FORCE)
 endif()
 set( CUDPP_FOUND "YES" )
 
 if ( CUDPP_ROOT_DIR )
 
     #-- Paths to CUDPP Library (cached so user can modify)
-	set ( CUDPP_INCLUDE_DIR "${CUDPP_ROOT_DIR}/include" CACHE PATH "Path to include files" FORCE)
+	set ( CUDPP_INCLUDE_DIR "${CUDPP_SOURCE_DIR}/include" CACHE PATH "Path to include files" FORCE)
 	set ( CUDPP_LIB_DIR "${CUDPP_ROOT_DIR}/lib" CACHE PATH "Path to libraries" FORCE)		
-
+	set ( CUDPP_DLL_DIR "${CUDPP_ROOT_DIR}/bin" CACHE PATH "Path to dlls" FORCE)
 	#-------- Locate Header files
     set ( OK_H "0" )
 	_FIND_FILE ( CUDPP_HEADERS CUDPP_INCLUDE_DIR "cudpp.h" "cudpp.h" OK_H )	
@@ -42,8 +44,8 @@ if ( CUDPP_ROOT_DIR )
      _FIND_FILE ( LIB2_REL CUDPP_LIB_DIR "cudpp_hash_${MSVC_VERSION}${CUDA_SUFFIX}x64.lib" "libcudpp_hash_${CUDA_SUFFIX}.so" OK_REL )
 
 	set (OK_DLL "0")
-	_FIND_FILE( CUDPP_DLL CUDPP_LIB_DIR "cudpp_${MSVC_VERSION}${CUDA_SUFFIX}x64.dll" " " OK_DLL)
-	_FIND_FILE( CUDPP_DLL CUDPP_LIB_DIR "cudpp_hash_${MSVC_VERSION}${CUDA_SUFFIX}x64.dll" " " OK_DLL)
+	_FIND_FILE( CUDPP_DLL CUDPP_DLL_DIR "cudpp_${MSVC_VERSION}${CUDA_SUFFIX}x64.dll" " " OK_DLL)
+	_FIND_FILE( CUDPP_DLL CUDPP_DLL_DIR "cudpp_hash_${MSVC_VERSION}${CUDA_SUFFIX}x64.dll" " " OK_DLL)
 
 	if (OK_REL EQUAL 2)
 		message ( STATUS "  Found LIBs (Release): ${LIB1_REL} ${LIB2_REL}" )
@@ -86,6 +88,7 @@ if ( ${CUDPP_FOUND} STREQUAL "NO" )
 endif()
 
 set ( CUDPP_LIB_DIR ${CUDPP_LIB_DIR} CACHE INTERNAL "" FORCE)
+set ( CUDPP_DLL_DIR ${CUDPP_DLL_DIR} CACHE INTERNAL "" FORCE)
 
 #-- We do not want user to modified these vars, but helpful to show them
 message ( STATUS "  CUDPP_ROOT_DIR:    ${CUDPP_ROOT_DIR}" )

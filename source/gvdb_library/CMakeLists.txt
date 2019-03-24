@@ -8,6 +8,14 @@ Project(${PROJNAME})
 Message(STATUS "-------------------------------")
 Message(STATUS "Processing Project ${PROJNAME}:")
 
+####################################################################################
+#set vcpkg base directory
+if(NOT VCPKG_ROOT_DIR)
+	set(VCPKG_ROOT_DIR $ENV{VCPKG_ROOT_DIR})
+	message(STATUS VCPKG_ROOT_DIR " ${VCPKG_ROOT_DIR}" )
+endif()
+
+
 #####################################################################################
 # Included Cmakes
 
@@ -35,7 +43,7 @@ if ( USE_SIMULATION )
    add_definitions(-DSIM_CODE)
 endif()
 
-set ( USE_OPENVDB OFF CACHE BOOL "Use OpenVDB" FORCE)
+set ( USE_OPENVDB ON CACHE BOOL "Use OpenVDB" FORCE)
 
 set ( USE_NVTX OFF CACHE BOOL "Use NSIGHT Markers" )
 if ( USE_NVTX ) 
@@ -190,7 +198,7 @@ endif()
 #
 if ( USE_OPENVDB ) 
     package_openvdb_binaries()
-   _INSTALL ( FILES ${OPENVDB_BINARIES} SOURCE ${OPENVDB_LIB_DIR} DESTINATION ${EXECUTABLE_OUTPUT_PATH} OUTPUT INSTALL_LIST  )
+   _INSTALL ( FILES ${OPENVDB_BINARIES} SOURCE ${OPENVDB_BIN_DIR} DESTINATION ${EXECUTABLE_OUTPUT_PATH} OUTPUT INSTALL_LIST  )
 endif()
 file( GLOB SHADERS shaders/*.glsl)
 file( GLOB HEADER_FILES src/*.h )

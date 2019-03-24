@@ -9,79 +9,62 @@ unset(OPENVDB_LIB CACHE)
 unset(OPENVDB_FOUND CACHE)
 unset(OPENVDB_INCLUDE_DIR CACHE)
 unset(OPENVDB_LIB_DIR CACHE)
+unset(OPENVDB_BIN_DIR CACHE)
 unset(OPENVDB_LIB_DEBUG CACHE)
 unset(OPENVDB_LIB_RELEASE CACHE)
 
+set(VCPKG_BIN_DIR "${VCPKG_ROOT_DIR}/installed/x64-windows/bin" CACHE PATH "path")
+set(VCPKG_BIN_DEBUG_DIR "${VCPKG_ROOT_DIR}/installed/x64-windows/debug/bin" CACHE PATH "path")
+set(VCPKG_LIB_DIR "${VCPKG_ROOT_DIR}/installed/x64-windows/lib" CACHE PATH "path")
+set(VCPKG_LIB_DEBUG_DIR "${VCPKG_ROOT_DIR}/installed/x64-windows/debug/lib" CACHE PATH "path")
+set(VCPKG_INCLUDE_DIR "${VCPKG_ROOT_DIR}/installed/x64-windows/include" CACHE PATH "path")
 
 FUNCTION(package_openvdb_binaries)
    list ( APPEND OPENVDB_LIST "blosc.dll")
-   list ( APPEND OPENVDB_LIST "boost_system-vc140-mt-1_64.dll")
-   list ( APPEND OPENVDB_LIST "boost_system-vc140-mt-gd-1_64.dll")
-   list ( APPEND OPENVDB_LIST "boost_thread-vc140-mt-1_64.dll")
-   list ( APPEND OPENVDB_LIST "boost_thread-vc140-mt-gd-1_64.dll")
-   list ( APPEND OPENVDB_LIST "Half.dll")
-   list ( APPEND OPENVDB_LIST "Iex.dll")
-   list ( APPEND OPENVDB_LIST "IexMath.dll")
-   list ( APPEND OPENVDB_LIST "IlmImf.dll")
-   list ( APPEND OPENVDB_LIST "IlmThread.dll")
-   list ( APPEND OPENVDB_LIST "Imath.dll")
+   list ( APPEND OPENVDB_LIST "boost_system-vc141-mt-x64-1_69.dll")
+   list ( APPEND OPENVDB_LIST "boost_thread-vc141-mt-x64-1_69.dll")
+   list ( APPEND OPENVDB_LIST "Half-2_3.dll")
+   list ( APPEND OPENVDB_LIST "Iex-2_3.dll")
+   list ( APPEND OPENVDB_LIST "IexMath-2_3.dll")
+   list ( APPEND OPENVDB_LIST "IlmImf-2_3.dll")
+   list ( APPEND OPENVDB_LIST "IlmThread-2_3.dll")
+   list ( APPEND OPENVDB_LIST "Imath-2_3.dll")
    list ( APPEND OPENVDB_LIST "openvdb.dll")
-   list ( APPEND OPENVDB_LIST "openvdb_d.dll")
    list ( APPEND OPENVDB_LIST "tbb.dll")
-   list ( APPEND OPENVDB_LIST "tbb_debug.dll")
-   list ( APPEND OPENVDB_LIST "zlib.dll")
-   list ( APPEND OPENVDB_LIST "zlibd.dll")
+   list ( APPEND OPENVDB_LIST "zlib1.dll")
    set ( OPENVDB_BINARIES ${OPENVDB_LIST} PARENT_SCOPE)      
 ENDFUNCTION()
 
-if (OPENVDB_ROOT_DIR AND USE_OPENVDB)
 
-  if (WIN32) 	 
-    set ( OPENVDB_LIB_DIR "${OPENVDB_ROOT_DIR}/lib64" CACHE PATH "path" )
-	set ( OPENVDB_INCLUDE_DIR "${OPENVDB_ROOT_DIR}/include" CACHE PATH "path" )
-	#-- get_filename_component ( LIB_PATH "${OPENVDB_LIB_RELEASE}" DIRECTORY ) 
-
-    #-------- Locate DLL
-	_find_files( OPENVDB_DLL OPENVDB_LIB_DIR "Blosc.dll" )   
-	_find_files( OPENVDB_DLL OPENVDB_LIB_DIR "Half.dll" )    
-	_find_files( OPENVDB_DLL OPENVDB_LIB_DIR "Iex.dll" )    
-	_find_files( OPENVDB_DLL OPENVDB_LIB_DIR "IexMath.dll" )    
-	_find_files( OPENVDB_DLL OPENVDB_LIB_DIR "IlmThread.dll" )    
-	_find_files( OPENVDB_DLL OPENVDB_LIB_DIR "Imath.dll" )    	
-	_find_files( OPENVDB_DLL OPENVDB_LIB_DIR "tbb.dll" )  
-	_find_files( OPENVDB_DLL OPENVDB_LIB_DIR "tbb_debug.dll" )  
-
-	#-------- Locate LIBS
-    _find_files( OPENVDB_LIB_DEBUG OPENVDB_LIB_DIR "openvdb_d.lib" )    
-	_find_files( OPENVDB_LIB_RELEASE OPENVDB_LIB_DIR "openvdb.lib" )	
+if(USE_OPENVDB) 
+	set ( OPENVDB_LIB_DIR "${VCPKG_LIB_DIR}" CACHE PATH "path" )
+	set ( OPENVDB_BIN_DIR "${VCPKG_BIN_DIR}" CACHE PATH "path" )
+	set ( OPENVDB_INCLUDE_DIR "${VCPKG_INCLUDE_DIR}" CACHE PATH "path" )
+	if(WIN32)
+		_find_files( OPENVDB_DLL VCPKG_BIN_DIR "blosc.dll" )
+		_find_files( OPENVDB_DLL VCPKG_BIN_DIR "Half-2_3.dll" )    
+		_find_files( OPENVDB_DLL VCPKG_BIN_DIR "Iex-2_3.dll" )    
+		_find_files( OPENVDB_DLL VCPKG_BIN_DIR "IexMath-2_3.dll" )    
+		_find_files( OPENVDB_DLL VCPKG_BIN_DIR "IlmThread-2_3.dll" )    
+		_find_files( OPENVDB_DLL VCPKG_BIN_DIR "Imath-2_3.dll" )    	
+		_find_files( OPENVDB_DLL VCPKG_BIN_DIR "tbb.dll" )  
+		
+		# -------- Locate LIBS
+		_find_files( OPENVDB_LIB_RELEASE VCPKG_LIB_DIR "openvdb.lib" )	
 	
-  endif(WIN32)
-
-  if (UNIX)
-    _find_files( OPENVDB_LIB OPENVDB_ROOT_DIR "libopenvdb.so" ) 
-	set(OPENVDB_DLL ${OPENVDB_LIB})
-  endif(UNIX)
-
-  #-------- Locate HEADERS
-  _find_files( OPENVDB_HEADERS OPENVDB_INCLUDE_DIR "Openvdb/openvdb.h" )
-
-  if (OPENVDB_DLL)
+	
+	endif(WIN32)
+	
+	_find_files( OPENVDB_HEADERS VCPKG_INCLUDE_DIR "Openvdb/openvdb.h" )
+	
+	if (OPENVDB_DLL)
 	  set( OPENVDB_FOUND "YES" )      
 	  
-  endif()
-  message(STATUS "OpenVDB Location: ${OPENVDB_ROOT_DIR}" )
-else()
-
-  set ( OPENVDB_ROOT_DIR "SET-OPENVDB_ROOT_DIR" CACHE PATH "")
-  if ( USE_OPENVDB) 
-  
-      message(STATUS "--> WARNING: OPENVDB not found. Some samples requiring OpenVDB may not run.
-        Set OPENVDB_ROOT_DIR to full path of library, and enable the USE_OPENVDB option." )
-  else()
-      message(STATUS "--> NOTE: OPENVDB is not enabled. Enable with the USE_OPENVDB option." )
-  endif()
-
+	endif()
+	
+	
 endif()
+
 
 include(FindPackageHandleStandardArgs)
 

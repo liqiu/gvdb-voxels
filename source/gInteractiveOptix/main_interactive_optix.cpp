@@ -163,35 +163,38 @@ bool Sample::init()
 
 	// Load polygons
 	// This loads an obj file into scene memory on cpu.
+	
 	char scnpath[1024];		
+	
 	printf ( "Loading polygon model.\n" );
-	gvdb.getScene()->AddModel ( "lucy.obj", 100.0, 0, 0, 0 );
+	gvdb.getScene()->AddModel ( "lucy.obj", 1.0, 0, 0, 0 );
 	gvdb.CommitGeometry( 0 );					// Send the polygons to GPU as OpenGL VBO	
-
-	// Load VBX
-	// This loads volumetric data
-	if ( !gvdb.getScene()->FindFile ( "explosion.vbx", scnpath ) ) {
-		nvprintf ( "Cannot find vbx file.\n" );
-		nverror();
+	
+	// Load VDB
+	if (!gvdb.getScene()->FindFile("wdas_cloud_eighth.vdb", scnpath)) {
+		gprintf("Cannot find vdb file.\n");
+		gerror();
 	}
-	printf ( "Loading VBX. %s\n", scnpath );
-	gvdb.LoadVBX ( scnpath );
 
-	gvdb.Measure( true );
+	printf("Loading VDB. %s\n", scnpath);
+	gvdb.SetChannelDefault(16, 16, 1);
+	if (!gvdb.LoadVDB(scnpath)) {                	// Load OpenVDB format			
+		gerror();
+	}
+
+	gvdb.Measure(true);
 
 	// Set volume params		
-	gvdb.SetTransform(Vector3DF(-125, -160, -125), Vector3DF(.25, .25, .25), Vector3DF(0, 0, 0), m_translate);
+	gvdb.SetTransform(Vector3DF(-300, -160, 0), Vector3DF(.25, .25, .25), Vector3DF(0, 0, 0), m_translate);
 	gvdb.SetEpsilon(0.001, 256);
 	gvdb.getScene()->SetSteps ( 0.2f, 16, 0.2f );			// SCN_PSTEP, SCN_SSTEP, SCN_FSTEP - Raycasting steps
-	gvdb.getScene()->SetExtinct ( -1.0f, 1.0f, 0.0f );		// SCN_EXTINCT, SCN_ALBEDO - Volume extinction	
+	gvdb.getScene()->SetExtinct ( -1.0f, 1.0f, 1.0f );		// SCN_EXTINCT, SCN_ALBEDO - Volume extinction	
 	gvdb.getScene()->SetVolumeRange(0.1f, 0.0f, 0.3f);		// Threshold: Isoval, Vmin, Vmax
 	gvdb.getScene()->SetCutoff(0.001f, 0.001f, 0.0f);		// SCN_MINVAL, SCN_ALPHACUT
 	gvdb.getScene()->SetBackgroundClr(0.1f, 0.2f, 0.4f, 1);
 
-	gvdb.getScene()->LinearTransferFunc ( 0.00f, 0.25f, Vector4DF(0.f, 0.f,  0.f, 0.0f), Vector4DF(0.0f, 0.0f, 0.f, 0.0f) );
-	gvdb.getScene()->LinearTransferFunc ( 0.25f, 0.50f, Vector4DF(0.f, 0.5f, 1.f, 0.0f), Vector4DF(0.0f, 0.f,  1.f, 0.2f) );
-	gvdb.getScene()->LinearTransferFunc ( 0.50f, 0.75f, Vector4DF(0.f, 0.f,  1.f, 0.2f), Vector4DF(0.0f, 1.f,  1.f, 0.3f) );
-	gvdb.getScene()->LinearTransferFunc ( 0.75f, 1.00f, Vector4DF(0.f, 1.f,  1.f, 0.3f), Vector4DF(0.0f, 1.f,  1.f, 1.0f) );
+	gvdb.getScene()->LinearTransferFunc ( 0.00f, 1.0f, Vector4DF(0.f, 0.f,  0.f, 0.0f), Vector4DF(1.0f, 1.0f, 1.f, 1.0f) );
+
 	gvdb.CommitTransferFunc ();
 
 	// Create Camera 
