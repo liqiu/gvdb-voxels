@@ -45,13 +45,13 @@ bool Sample::init()
 
 	// Load VBX
 	char scnpath[1024];		
-	if ( !gvdb.getScene()->FindFile ( "explosion.vbx", scnpath ) ) {
+	if ( !gvdb.getScene()->FindFile ( "wdas_cloud_eighth.vdb", scnpath ) ) {
 		nvprintf ( "Cannot find vbx file.\n" );
 		nverror();
 	}
 	printf ( "Loading VBX. %s\n", scnpath );
 	gvdb.SetChannelDefault ( 16, 16, 16 );
-	gvdb.LoadVBX ( scnpath );	
+	gvdb.LoadVDB ( scnpath );	
 
 	// Set volume params
 	gvdb.SetTransform(m_pretrans, m_scale, m_angs, m_trans);
