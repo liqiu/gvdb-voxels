@@ -30,6 +30,7 @@ typedef unsigned char		uchar;
 typedef unsigned int		uint;
 typedef unsigned short		ushort;
 typedef unsigned long long	uint64;
+
 __constant__ float			NOHIT = 1.0e10f;
 __constant__ uchar4			BLACK = {0,0,0,0};
 #define ALIGN(x)			__align__(x)

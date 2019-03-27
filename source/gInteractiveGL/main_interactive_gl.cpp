@@ -66,7 +66,6 @@ bool Sample::init()
 	gvdb.getScene()->LinearTransferFunc(0.75f, 1.00f, Vector4DF(1, 1, 0, 0.15f), Vector4DF(1, 1, 1, 0.2f));
 	gvdb.CommitTransferFunc ();
 
-
 	// Create Camera 
 	Camera3D* cam = new Camera3D;						
 	cam->setFov ( 50.0 );
@@ -74,7 +73,7 @@ bool Sample::init()
 	gvdb.getScene()->SetCamera( cam );
 	
 	// Create Light
-	Light* lgt = new Light;								
+	Light* lgt = new Light;		
 	lgt->setOrbit ( Vector3DF(299,57.3f,0), Vector3DF(132,-20,50), 200, 1.0 );
 	gvdb.getScene()->SetLight ( 0, lgt );	
 

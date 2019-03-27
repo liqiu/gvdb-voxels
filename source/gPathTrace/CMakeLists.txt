@@ -41,7 +41,7 @@ set ( REQUIRE_TGA "1" )
 set ( REQUIRE_GLEW "1" )
 set ( REQUIRE_MAIN "1" )
 set ( REQUIRE_NVGUI "1" )
-set ( REQUIRE_OPTIX "1" )
+set ( REQUIRE_OPTIX "0" )
 
 ####################################################################################
 # Add Utils

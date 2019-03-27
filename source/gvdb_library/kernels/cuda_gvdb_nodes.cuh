@@ -75,9 +75,9 @@ struct ALIGN(16) VDBInfo {
 	bool		update;
 	uchar		clr_chan;
 	float3		bmin;
-	float3		bmax;	
+	float3		bmax;
 	cudaTextureObject_t		volIn[MAX_CHANNEL];
-	cudaSurfaceObject_t		volOut[MAX_CHANNEL];	
+	cudaSurfaceObject_t		volOut[MAX_CHANNEL];
 };
 
 __device__ float								cdebug[256]; 
