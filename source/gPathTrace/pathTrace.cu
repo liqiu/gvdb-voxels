@@ -291,33 +291,49 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 	float3 scattering = 25.0f * make_float3(0.25, 0.5, 1.0);
 	float3 extinction = absorption + scattering;
 
+	float density =0; 
 
 	float3 scatteredLuminance = make_float3(0.0, 0.0, 0.0);
 	float3 transmittance = make_float3(1.0);
 	float3 L = make_float3(50, 50, 50); // Light color
 	float3 color = make_float3(1.0, 0.0, 0.0);
-	float stepSize = 0.1;
+	float stepSize = 0.1f;
 
 
 	float3 t = rayBoxIntersect(pos, dir, gvdb->bmin, gvdb->bmax);
 	if (t.z == NOHIT) return;
 	
-
 	float3 vmin;
 	float3 vdel;
-	int		b;
+	int lev = gvdb->top_lev;
+	VDBNode* node = getNode(gvdb, lev, 0 , &vmin); // get root node
+	float3 wpos = pos + dir * t.x; //get world position at first intersection 
+	float3 vtop = gvdb->vdel[lev];
+	float3 root_pos = (wpos - vmin) / gvdb->vdel[lev]; // get position relative to root node
 
 	for (float f = t.x; f < t.y; f += stepSize) {
 
-		float3 wpos = pos + dir * f;
-		VDBNode* node = getleafNodeAtPoint(gvdb, wpos, &vmin, &vdel);
+		VDBNode* child_node = getleafNodeAtPoint(gvdb, root_pos, &vmin, &vdel);
+		int3 atlas_pos = node->mValue; // atlas position of node 
 
-		float3 o = make_float3(node->mValue);
-		float3 p = (wpos - vmin) / gvdb->vdel[0];
+		// we will now dive inside brick and sample voxels 
+		
+		float3 p = (pos - vmin);
+		for (int iter = 0; iter < MAX_ITER ; iter++) {
+			density += tex3D<float>(gvdb->volIn[chan], p.x + atlas_pos.x , p.y + atlas_pos.y , p.z + atlas_pos.z ); //Sample density at voxel 
+			p += dir * stepSize * 0.1;
+		}
 
-		//sample density
-		float density = tex3D<float>(gvdb->volIn[chan], p.x + o.x, p.y + o.y, p.z + o.z);
 
+		root_pos += dir * stepSize;
+
+		transmittance *= make_float3(exp(-density)); 
+		//if (length(transmittance) < 0.1f) return;
+		
+		
+		
+		/*
+		// calculate accumulated shadow transmittance
 		float stepSizeShadow = 0.1; 
 		float3 shadow = getShadowTransmittance(wpos, 1.0, stepSizeShadow, extinction);
 		
@@ -328,13 +344,11 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 
 		// Evaluate transmittance to view independentely
 		transmittance *= exp3(-sampleExtinction * stepSize);
-
-	}
+		*/
 		
+		clr = make_float4(transmittance,1.0f);
+	}
 
-	
-
-	clr = make_float4(transmittance * color + scatteredLuminance,1);
 }
 
 
@@ -348,7 +362,7 @@ extern "C" __global__ void pathTrace(VDBInfo* gvdb, uchar chan, uchar4* outBuf) 
 
 	float3 rdir = normalize(getViewRay((float(x) + 0.5) / scn.width, (float(y) + 0.5) / scn.height));
 	float3 hit = make_float3(NOHIT, NOHIT, NOHIT);
-	float4 clr = make_float4(0.1f, 0.1f, 0.1f, 0.1f);
+	float4 clr = make_float4(0.2f, 0.2f, 0.2f, 0.0f);
 	float3 norm = make_float3(0,0,0);;
 	float4 density = make_float4(0,0,0,0); 
 

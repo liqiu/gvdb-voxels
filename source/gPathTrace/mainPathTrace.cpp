@@ -96,16 +96,18 @@ bool Sample::init() {
 		exit(-1);
 	}
 	printf("Loading VDB. %s\n", scnpath);
-	gvdb.SetChannelDefault(16, 16, 16);
 	gvdb.LoadVDB(scnpath);
 	gvdb.Measure(true);
+
+	//gvdb.SetTransform(Vector3DF(0, -260, 0), Vector3DF(.1, .1, .1), Vector3DF(0, 0, 0), Vector3DF(0, 0, 0));
+
 	gvdb.getScene()->SetVolumeRange(0.1f, 0.0f, 1.0f);
 	gvdb.getScene()->SetBackgroundClr(0.1f, 0.2f, 0.4f, 1.0);
 	gvdb.SetEpsilon(0.0001f, 0);
 	// Create Camera and Light
 	Camera3D* cam = new Camera3D;
 	cam->setFov(35);
-	cam->setOrbit(Vector3DF(0, 0, 0), Vector3DF(0, 0, 5), 10, 1.0f);
+	cam->setOrbit(Vector3DF(0, 0, 0), Vector3DF(0, 0, 5), 5, 1.0f);
 	gvdb.getScene()->SetCamera(cam);
 	gvdb.getScene()->SetRes(w, h);
 
