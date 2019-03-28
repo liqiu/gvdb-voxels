@@ -194,7 +194,7 @@ bool Sample::init()
 	gvdb.getScene()->SetBackgroundClr(0.1f, 0.2f, 0.4f, 1);
 
 	gvdb.getScene()->LinearTransferFunc ( 0.00f, 1.0f, Vector4DF(0.f, 0.f,  0.f, 0.0f), Vector4DF(1.0f, 1.0f, 1.f, 1.0f) );
-
+	
 	gvdb.CommitTransferFunc ();
 
 	// Create Camera 

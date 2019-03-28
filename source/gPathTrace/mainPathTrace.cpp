@@ -91,7 +91,7 @@ bool Sample::init() {
 
 	char scnpath[1024];
 
-	if (!gvdb.FindFile("wdas_cloud_eighth.vdb", scnpath)) {
+	if (!gvdb.FindFile("bunny.vdb", scnpath)) {
 		printf("Cannot find vdb file.\n");
 		exit(-1);
 	}
@@ -101,11 +101,11 @@ bool Sample::init() {
 	gvdb.Measure(true);
 	gvdb.getScene()->SetVolumeRange(0.1f, 0.0f, 1.0f);
 	gvdb.getScene()->SetBackgroundClr(0.1f, 0.2f, 0.4f, 1.0);
-
+	gvdb.SetEpsilon(0.0001f, 0);
 	// Create Camera and Light
 	Camera3D* cam = new Camera3D;
-	cam->setFov(100);
-	cam->setOrbit(Vector3DF(20, 30, 0), Vector3DF(125, 160, 125), 600, 1.0f);
+	cam->setFov(35);
+	cam->setOrbit(Vector3DF(0, 0, 0), Vector3DF(0, 0, 5), 10, 1.0f);
 	gvdb.getScene()->SetCamera(cam);
 	gvdb.getScene()->SetRes(w, h);
 
@@ -113,7 +113,7 @@ bool Sample::init() {
 	lgt->setOrbit(Vector3DF(50, 65, 0), Vector3DF(125, 140, 125), 200, 1.0f);
 	gvdb.getScene()->SetLight(0, lgt);
 
-
+	
 	// Add render buffer 
 	printf("Creating screen buffer. %d x %d\n", w, h);
 	gvdb.AddRenderBuf(0, w, h, 4);
