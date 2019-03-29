@@ -20,7 +20,7 @@
 //----------------------------------------------------------------------------------
 // 
 // File: Custom path trace kernel: 
-//       Contents are modified from "cuda_gvdb_raycast.cuh" in gvdb library
+//       Performs a custom ray marching inside volume
 //
 //-----------------------------------------------
 
@@ -29,7 +29,7 @@
 
 #include <stdio.h>
 #include "cuda_math.cuh"
-#include <cuda_runtime.h>
+#include <cuda_runtime.h> 
 #include <curand_kernel.h>
 
 
@@ -46,32 +46,17 @@ typedef unsigned long long	uint64;
 #include "cuda_gvdb_geom.cuh"		// GVDB Geom helpers
 #include "cuda_gvdb_dda.cuh"		// GVDB DDA 
 
-
-
-// gvdbBrickFunc ( gvdb, channel, nodeid, t, pos, dir, pstep, hit, norm, clr )
-typedef void(*gvdbBrickFunc_t)(VDBInfo*, uchar, int, float3, float3, float3, float3&, float3&, float3&, float4&);
-
 #define MAXLEV			5
 #define MAX_ITER		256
 #define EPS				0.0001
 
-#define LO		0
-#define	MID		1.0
-#define	HI		2.0
-#define M_PI       3.14159265358979323846   // pi
-
+#define LO				0
+#define	MID				1.0
+#define	HI				2.0
+#define M_PI			3.14159265358979323846f   // pie
+#define INV_4PI			1 / 4 * M_PI
 
 // Helper functions 
-inline __device__ float getLinearDepth(float* depthBufFloat)
-{
-	int x = blockIdx.x * blockDim.x + threadIdx.x;					// Pixel coordinates
-	int y = blockIdx.y * blockDim.y + threadIdx.y;
-
-	float z = depthBufFloat[(SCN_HEIGHT - 1 - y) * SCN_WIDTH + x];	// Get depth value
-	float n = scn.camnear;
-	float f = scn.camfar;
-	return (-n * f / (f - n)) / (z - (f / (f - n)));				// Return linear depth
-}
 
 inline __device__ uchar4 getColor(VDBInfo* gvdb, uchar chan, float3 p)
 {
@@ -88,183 +73,59 @@ inline __device__ float3 exp3(float3 val)
 	return tmp;
 }
 
-// Brick samplers
 #define EPSTEST(a,b,c)	(a>b-c && a<b+c)
 #define VOXEL_EPS	0.0001
 
-__device__ void raySurfaceVoxelBrick(VDBInfo* gvdb, uchar chan, int nodeid, float3 t, float3 pos, float3 dir, float3& pStep, float3& hit, float3& norm, float4& hclr)
-{
-	float3 vmin;
-	VDBNode* node = getNode(gvdb, 0, nodeid, &vmin);				// Get the VDB leaf node
-	float3	p, tDel, tSide, mask;								// 3DDA variables	
-	float3  o = make_float3(node->mValue);	// Atlas sub-volume to trace	
 
-	PREPARE_DDA_LEAF
+//Phase functions 
 
-		for (int iter = 0; iter < MAX_ITER && p.x >= 0 && p.y >= 0 && p.z >= 0 && p.x < gvdb->res[0] && p.y < gvdb->res[0] && p.z < gvdb->res[0]; iter++)
-		{
-			if (tex3D<float>(gvdb->volIn[chan], p.x + o.x + .5, p.y + o.y + .5, p.z + o.z + .5) > SCN_THRESH) {		// test texture atlas
-				vmin += p * gvdb->vdel[0];		// voxel location in world
-				t = rayBoxIntersect(pos, dir, vmin, vmin + gvdb->voxelsize);
-				if (t.z == NOHIT) {
-					hit.z = NOHIT;
-					continue;
-				}
-				hit = getRayPoint(pos, dir, t.x);
-				norm.x = EPSTEST(hit.x, vmin.x + gvdb->voxelsize.x, VOXEL_EPS) ? 1 : (EPSTEST(hit.x, vmin.x, VOXEL_EPS) ? -1 : 0);
-				norm.y = EPSTEST(hit.y, vmin.y + gvdb->voxelsize.y, VOXEL_EPS) ? 1 : (EPSTEST(hit.y, vmin.y, VOXEL_EPS) ? -1 : 0);
-				norm.z = EPSTEST(hit.z, vmin.z + gvdb->voxelsize.z, VOXEL_EPS) ? 1 : (EPSTEST(hit.z, vmin.z, VOXEL_EPS) ? -1 : 0);
-				if (gvdb->clr_chan != CHAN_UNDEF) hclr = getColorF(gvdb, gvdb->clr_chan, p + o);
-				return;
-			}
-			NEXT_DDA
-				STEP_DDA
-		}
-}
+__device__ float isotropic() {
 
-__device__ void rayShadowBrick(VDBInfo* gvdb, uchar chan, int nodeid, float3 t, float3 pos, float3 dir, float3& pStep, float3& hit, float3& norm, float4& clr)
-{
-	float3 vmin;
-	VDBNode* node = getNode(gvdb, 0, nodeid, &vmin);			// Get the VDB leaf node	
-	t.x += gvdb->epsilon;												// make sure we start inside
-	t.y -= gvdb->epsilon;												// make sure we end insidoke	
-	float3 o = make_float3(node->mValue);					// atlas sub-volume to trace	
-	float3 p = (pos + t.x*dir - vmin) / gvdb->vdel[0];		// sample point in index coords
-	float3 pt = SCN_PSTEP * dir;								// index increment	
-	float val = 0;
-
-	// accumulate remaining voxels	
-	for (; clr.w < 1 && p.x >= 0 && p.y >= 0 && p.z >= 0 && p.x < gvdb->res[0] && p.y < gvdb->res[0] && p.z < gvdb->res[0];) {
-		val = exp(SCN_EXTINCT * transfer(gvdb, tex3D<float>(gvdb->volIn[chan], p.x + o.x, p.y + o.y, p.z + o.z)).w * SCN_SSTEP / (1.0 + t.x * 0.4));		// 0.4 = shadow gain
-		clr.w = 1.0 - (1.0 - clr.w) * val;
-		p += pt;
-		t.x += SCN_SSTEP;
-	}
-}
-
-
-
-__device__ void customRayDeepBrick(VDBInfo* gvdb, uchar chan, int nodeid, float3 t, float3 pos, float3 dir, float3& pstep, float3& hit, float3& norm, float4& clr)
-{
-	float3 vmin;
-	VDBNode* node = getNode(gvdb, 0, nodeid, &vmin);			// Get the VDB leaf node		
-
-	//t.x = SCN_PSTEP * ceil( t.x / SCN_PSTEP );						// start on sampling wavefront	
-
-	float3 o = make_float3(node->mValue);					// atlas sub-volume to trace
-	float3 wp = pos + t.x*dir;
-	float3 p = (wp - vmin) / gvdb->vdel[0];					// sample point in index coords	
-	float3 wpt = SCN_PSTEP * dir * gvdb->vdel[0];					// world increment
-	float4 val = make_float4(0, 0, 0, 0);
-	float4 hclr;
-	int iter = 0;
-	float dt = length(SCN_PSTEP*dir*gvdb->vdel[0]);
-
-	// record front hit point at first significant voxel
-	if (hit.x == 0) hit.x = t.x; // length(wp - pos);
-
-	// skip empty voxels
-	for (iter = 0; val.w < SCN_MINVAL && iter < MAX_ITER && p.x >= 0 && p.y >= 0 && p.z >= 0 && p.x < gvdb->res[0] && p.y < gvdb->res[0] && p.z < gvdb->res[0]; iter++) {
-		val.w = transfer(gvdb, tex3D<float>(gvdb->volIn[chan], p.x + o.x, p.y + o.y, p.z + o.z)).w;
-		p += SCN_PSTEP * dir;
-		wp += wpt;
-		t.x += dt;
-	}
-
-	for (; iter < MAX_ITER && p.x >= 0 && p.y >= 0 && p.z >= 0 && p.x < gvdb->res[0] && p.y < gvdb->res[0] && p.z < gvdb->res[0]; iter++) {
-
-		if (clr.x > 1 || clr.y > 1 || clr.z > 1 || clr.w > 1) return;
-		val = transfer(gvdb, tex3D<float>(gvdb->volIn[chan], p.x + o.x, p.y + o.y, p.z + o.z));
-		clr += val; 
-		p += SCN_PSTEP * dir;
-		wp += wpt;
-		t.x += dt;
-
-	}
-
-
-	hit.y = t.x;  // length(wp - pos);
+	return INV_4PI;
 
 }
 
-__device__ void myRayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float3& hit, float3& norm, float4& clr, gvdbBrickFunc_t brickFunc)
-{
-	int		nodeid[MAXLEV];					// level variables
-	float	tMax[MAXLEV];
-	int		b;
+__device__ float henyey_greenstein(float cos_theta, float g) {
 
-	// GVDB - Iterative Hierarchical 3DDA on GPU
-	float3 vmin;
-	int lev = gvdb->top_lev;
-	
-	nodeid[lev] = 0;		// rootid ndx
-	float3 t = rayBoxIntersect(pos, dir, gvdb->bmin, gvdb->bmax);	// intersect ray with bounding box	
-	VDBNode* node = getNode(gvdb, lev, nodeid[lev], &vmin);			// get root VDB node	
-	if (t.z == NOHIT) return; //TODO:implement texture lookup here
-	
-	// 3DDA variables		
-	t.x += gvdb->epsilon;
-	tMax[lev] = t.y - gvdb->epsilon;
-	float3 pStep = make_float3(isign3(dir));
-	float3 p, tDel, tSide, mask;
-	int iter;
+	float denominator = 1 + g * g + 2 * g * cos_theta; 
 
-	PREPARE_DDA
+	return INV_4PI * (1 - g*g) / (denominator * sqrtf(denominator);
 
-		for (iter = 0; iter < MAX_ITER && lev > 0 && lev <= gvdb->top_lev && p.x >= 0 && p.y >= 0 && p.z >= 0 && p.x <= gvdb->res[lev] && p.y <= gvdb->res[lev] && p.z <= gvdb->res[lev]; iter++) {
-
-			NEXT_DDA
-
-				// depth buffer test [optional]
-				if (SCN_DBUF != 0x0) {
-					if (t.x > getLinearDepth(SCN_DBUF)) {
-						hit.z = 0;
-						return;
-					}
-				}
-
-			// node active test
-			b = (((int(p.z) << gvdb->dim[lev]) + int(p.y)) << gvdb->dim[lev]) + int(p.x);	// bitmaskpos
-			if (isBitOn(gvdb, node, b)) {							// check vdb bitmask for voxel occupancy						
-				if (lev == 1) {									// enter brick function..
-					nodeid[0] = getChild(gvdb, node, b);
-					t.x += gvdb->epsilon;
-					(*brickFunc) (gvdb, chan, nodeid[0], t, pos, dir, pStep, hit, norm, clr);
-					if (clr.w <= 0) {
-						clr.w = 0;
-						return;
-					}			// deep termination				
-					if (hit.z != NOHIT) return;						// surface termination												
-
-					STEP_DDA										// leaf node empty, step DDA
-					//t.x = hit.y;				
-					//PREPARE_DDA
-
-				}
-				else {
-					lev--;											// step down tree
-					nodeid[lev] = getChild(gvdb, node, b);				// get child 
-					node = getNode(gvdb, lev, nodeid[lev], &vmin);	// child node
-					t.x += gvdb->epsilon;										// make sure we start inside child
-					tMax[lev] = t.y - gvdb->epsilon;							// t.x = entry point, t.y = exit point							
-					PREPARE_DDA										// start dda at next level down
-				}
-			}
-			else {
-				STEP_DDA											// empty voxel, step DDA
-			}
-			while (t.x > tMax[lev] && lev <= gvdb->top_lev) {
-				lev++;												// step up tree
-				if (lev <= gvdb->top_lev) {
-					node = getNode(gvdb, lev, nodeid[lev], &vmin);
-					PREPARE_DDA										// restore dda at next level up
-				}
-			}
-		}
 }
 
+__device__ float double_henyey_greenstein(float cos_theta, float f, float g1, float g2) {
+
+	return (1-f)*henyey_greenstein(cos_theta,g1) + f * henyey_greenstein(cos_theta , g2);
+
+}
+
+__device__ float schlick(float cos_theta, float k) { // simpler hg phase function Note: -1<k<1   
+
+	float denominator = 1 + k*cos_theta;
+
+	return INV_4PI * (1-k*k) / (denominator*denominator);
+
+}
+
+__device__ float rayleigh(float cos_sq_theta, float lambda) // rayleigh scattering
+{
+
+	return 3 * (1 + cos_sq_theta) / 4 * lambda*lambda*lambda*lambda; // 
+
+}
+
+__device__ float cornette_shanks(float cos_theta, float cos_sq_theta, float g) {
+
+	float first_part  = (1 - g * g) / (2 + g * g);
+	float second_part = (1 + cos_sq_theta) / pow((1 + g * g - cos_theta), 1.5f);
+
+	return INV_4PI * 1.5f * first_part * second_part;
+
+}
+// End phase functions
 
 
+// Shadow ray marcher
 __device__ float3 getShadowTransmittance(float3 pos, float sampledDistance, float stepSizeShadow, float3 extinction) {
 
 	float3 shadow = make_float3(1.0f);
@@ -279,10 +140,7 @@ __device__ float3 getShadowTransmittance(float3 pos, float sampledDistance, floa
 
 	return shadow;
 
-
 }
-
-
 
 
 __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float3& hit, float4& clr) {
