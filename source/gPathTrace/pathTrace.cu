@@ -67,9 +67,9 @@ inline __device__ float4 getColorF(VDBInfo* gvdb, uchar chan, float3 p)
 	return make_float4(tex3D<uchar4>(gvdb->volIn[chan], (int)p.x, (int)p.y, (int)p.z));
 }
 
-inline __device__ float3 exp3(float3 val) 
+inline __device__ float3 exp3(float3 val)
 {
-	float3 tmp = make_float3(exp(val.x), exp(val.y), exp(val.z)); 
+	float3 tmp = make_float3(exp(val.x), exp(val.y), exp(val.z));
 	return tmp;
 }
 
@@ -87,23 +87,23 @@ __device__ float isotropic() {
 
 __device__ float henyey_greenstein(float cos_theta, float g) {
 
-	float denominator = 1 + g * g + 2 * g * cos_theta; 
+	float denominator = 1 + g * g - 2 * g * cos_theta;
 
-	return INV_4PI * (1 - g*g) / (denominator * sqrtf(denominator);
+	return INV_4PI * (1 - g * g) / (denominator * sqrtf(denominator));
 
 }
 
 __device__ float double_henyey_greenstein(float cos_theta, float f, float g1, float g2) {
 
-	return (1-f)*henyey_greenstein(cos_theta,g1) + f * henyey_greenstein(cos_theta , g2);
+	return (1 - f)*henyey_greenstein(cos_theta, g1) + f * henyey_greenstein(cos_theta, g2);
 
 }
 
 __device__ float schlick(float cos_theta, float k) { // simpler hg phase function Note: -1<k<1   
 
-	float denominator = 1 + k*cos_theta;
+	float denominator = 1 + k * cos_theta;
 
-	return INV_4PI * (1-k*k) / (denominator*denominator);
+	return INV_4PI * (1 - k * k) / (denominator*denominator);
 
 }
 
@@ -116,7 +116,7 @@ __device__ float rayleigh(float cos_sq_theta, float lambda) // rayleigh scatteri
 
 __device__ float cornette_shanks(float cos_theta, float cos_sq_theta, float g) {
 
-	float first_part  = (1 - g * g) / (2 + g * g);
+	float first_part = (1 - g * g) / (2 + g * g);
 	float second_part = (1 + cos_sq_theta) / pow((1 + g * g - cos_theta), 1.5f);
 
 	return INV_4PI * 1.5f * first_part * second_part;
@@ -129,12 +129,12 @@ __device__ float cornette_shanks(float cos_theta, float cos_sq_theta, float g) {
 __device__ float3 getShadowTransmittance(float3 pos, float sampledDistance, float stepSizeShadow, float3 extinction) {
 
 	float3 shadow = make_float3(1.0f);
-	float3 Ldir = normalize(scn.light_pos - pos); 
+	float3 Ldir = normalize(scn.light_pos - pos);
 
 	for (float tshadow = 0.0f; tshadow < sampledDistance; tshadow += stepSizeShadow) {
 
 		float3 shadowPos = pos + Ldir * tshadow;
-		float densityShadow = 1.0f; 
+		float densityShadow = 1.0f;
 		shadow *= exp3(-densityShadow * extinction*stepSizeShadow);
 	}
 
@@ -149,52 +149,89 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 	float3 scattering = 25.0f * make_float3(0.25, 0.5, 1.0);
 	float3 extinction = absorption + scattering;
 
-	float density =0; 
+	float density = 0.0f;
 
 	float3 scatteredLuminance = make_float3(0.0, 0.0, 0.0);
 	float3 transmittance = make_float3(1.0);
 	float3 L = make_float3(50, 50, 50); // Light color
 	float3 color = make_float3(1.0, 0.0, 0.0);
-	float stepSize = 0.1f;
+	float stepSize = 0.01f;
 
 
 	float3 t = rayBoxIntersect(pos, dir, gvdb->bmin, gvdb->bmax);
 	if (t.z == NOHIT) return;
-	
+
 	float3 vmin;
 	float3 vdel;
 	int lev = gvdb->top_lev;
-	VDBNode* node = getNode(gvdb, lev, 0 , &vmin); // get root node
+	VDBNode* node = getNode(gvdb, lev, 0, &vmin); // get root node
 	float3 wpos = pos + dir * t.x; //get world position at first intersection 
-	float3 vtop = gvdb->vdel[lev];
-	float3 root_pos = (wpos - vmin) / gvdb->vdel[lev]; // get position relative to root node
+	float3 brick_pos = (wpos - vmin) / (gvdb->vdel[lev] * 0.333333f); // get position relative to root node
+
+	brick_pos -= dir * 1.00001;
+	uint64 nodeid;
+	float3 offset;
 
 	for (float f = t.x; f < t.y; f += stepSize) {
 
-		VDBNode* child_node = getleafNodeAtPoint(gvdb, root_pos, &vmin, &vdel);
-		int3 atlas_pos = node->mValue; // atlas position of node 
+		if (density > 100.0f) continue;
+
+
+		VDBNode* child_node = getNodeAtPoint(gvdb, brick_pos, &offset, &vmin, &vdel, &nodeid);
+		
+		brick_pos += (dir * stepSize);
+
+
 
 		// we will now dive inside brick and sample voxels 
-		
-		float3 p = (pos - vmin);
-		for (int iter = 0; iter < MAX_ITER ; iter++) {
-			density += tex3D<float>(gvdb->volIn[chan], p.x + atlas_pos.x , p.y + atlas_pos.y , p.z + atlas_pos.z ); //Sample density at voxel 
-			p += dir * stepSize * 0.1;
+
+		float3 voxel_pos = (brick_pos - vmin) / (gvdb->vdel[0]);
+		int3 atlas_pos = child_node->mValue; // atlas position of node 
+
+		int iter = 0;
+		float dt = length(stepSize*dir*gvdb->vdel[0]);
+
+		if (child_node != 0x0) {
+
+			for (iter = 0; iter < MAX_ITER && voxel_pos.x >= 0 && voxel_pos.y >= 0 && voxel_pos.z >= 0 && voxel_pos.x < gvdb->res[0] && voxel_pos.y < gvdb->res[0] && voxel_pos.z < gvdb->res[0]; iter++) {
+
+				density += tex3D<float>(gvdb->volIn[chan], voxel_pos.x + atlas_pos.x, voxel_pos.y + atlas_pos.y, voxel_pos.z + atlas_pos.z); //Sample density at voxel 
+				
+				density *= 0.1;
+				
+				voxel_pos += dir * stepSize;
+				brick_pos += dir * stepSize * gvdb->vdel[0];
+				f += dt;
+			}
+
+		}
+
+		transmittance *= make_float3(exp(-density));
+
+		/*
+
+
+		for (int iter = 0; iter < MAX_ITER && p.x >= 0 && p.y >= 0 && p.z >= 0 && p.x < gvdb->res[0] && p.y < gvdb->res[0] && p.z < gvdb->res[0]; iter++) {
+
+			
+			p += dir * stepSize;
+			root_pos += dir * stepSize;
+			f += length(0.1*dir*gvdb->vdel[0]);
 		}
 
 
-		root_pos += dir * stepSize;
 
-		transmittance *= make_float3(exp(-density)); 
+
+		
 		//if (length(transmittance) < 0.1f) return;
-		
-		
-		
-		/*
+
+
+
+
 		// calculate accumulated shadow transmittance
-		float stepSizeShadow = 0.1; 
+		float stepSizeShadow = 0.1;
 		float3 shadow = getShadowTransmittance(wpos, 1.0, stepSizeShadow, extinction);
-		
+
 		float3 S = L * shadow * density * scattering;
 		float3 sampleExtinction = make_float3(fmaxf(0.0000000001, (density * extinction).x), fmaxf(0.0000000001, (density * extinction).y), fmaxf(0.0000000001, (density * extinction).z));
 		float3 Sint = (S - S * exp3(-sampleExtinction * stepSize)) / sampleExtinction;
@@ -203,9 +240,12 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 		// Evaluate transmittance to view independentely
 		transmittance *= exp3(-sampleExtinction * stepSize);
 		*/
-		
-		clr = make_float4(transmittance,1.0f);
+
 	}
+
+	
+	clr = make_float4(transmittance,1.0f);
+
 
 }
 
@@ -213,21 +253,18 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 
 extern "C" __global__ void pathTrace(VDBInfo* gvdb, uchar chan, uchar4* outBuf) {
 
-	
+
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
 	int y = blockIdx.y * blockDim.y + threadIdx.y;
 	if (x >= scn.width || y >= scn.height) return;
 
 	float3 rdir = normalize(getViewRay((float(x) + 0.5) / scn.width, (float(y) + 0.5) / scn.height));
 	float3 hit = make_float3(NOHIT, NOHIT, NOHIT);
-	float4 clr = make_float4(0.2f, 0.2f, 0.2f, 0.0f);
-	float3 norm = make_float3(0,0,0);;
-	float4 density = make_float4(0,0,0,0); 
+	float4 clr = make_float4(1.0f, 1.0f, 1.0f, 0.0f);
 
-	//myRayCast(gvdb, chan, scn.campos, rdir, hit, norm, clr, raySurfaceVoxelBrick);
 	RayCast(gvdb, chan, scn.campos, rdir, hit, clr);
-	
-	outBuf[y*scn.width + x] = make_uchar4(clr.x*255 , clr.y*255, clr.z*255, 1);
+
+	outBuf[y*scn.width + x] = make_uchar4(clr.x * 255, clr.y * 255, clr.z * 255, 1);
 
 
 }

@@ -99,7 +99,7 @@ bool Sample::init() {
 	gvdb.LoadVDB(scnpath);
 	gvdb.Measure(true);
 
-	//gvdb.SetTransform(Vector3DF(0, -260, 0), Vector3DF(.1, .1, .1), Vector3DF(0, 0, 0), Vector3DF(0, 0, 0));
+	gvdb.SetTransform(Vector3DF(0, 90, 0), Vector3DF(1, 1, 1), Vector3DF(0, 0, 0), Vector3DF(0, 0, 0));
 
 	gvdb.getScene()->SetVolumeRange(0.1f, 0.0f, 1.0f);
 	gvdb.getScene()->SetBackgroundClr(0.1f, 0.2f, 0.4f, 1.0);
