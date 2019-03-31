@@ -17,7 +17,7 @@
 #include "main.h"			// window system 
 #include <GL/glew.h>
 
-VolumeGVDB	gvdb;
+VolumeGVDB		gvdb;
 CUmodule		cuCustom;
 CUfunction		cuRaycastKernel;
 

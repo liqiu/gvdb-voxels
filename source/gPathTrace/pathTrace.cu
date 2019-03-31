@@ -24,9 +24,6 @@
 //
 //-----------------------------------------------
 
-
-
-
 #include <stdio.h>
 #include "cuda_math.cuh"
 #include <cuda_runtime.h> 
@@ -66,7 +63,6 @@ inline __device__ float4 getColorF(VDBInfo* gvdb, uchar chan, float3 p)
 {
 	return make_float4(tex3D<uchar4>(gvdb->volIn[chan], (int)p.x, (int)p.y, (int)p.z));
 }
-
 inline __device__ float3 exp3(float3 val)
 {
 	float3 tmp = make_float3(exp(val.x), exp(val.y), exp(val.z));
@@ -75,7 +71,6 @@ inline __device__ float3 exp3(float3 val)
 
 #define EPSTEST(a,b,c)	(a>b-c && a<b+c)
 #define VOXEL_EPS	0.0001
-
 
 //Phase functions 
 
@@ -158,13 +153,14 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 	float3 transmittance = make_float3(1.0);
 	float3 L = make_float3(50, 50, 50); // Light color
 	float3 color = make_float3(1.0, 0.0, 0.0);
-	float stepSize = 0.01f;
+	float stepSize = 0.005f;
 
 
 	float3 t = rayBoxIntersect(pos, dir, gvdb->bmin, gvdb->bmax);
 	if (t.z == NOHIT) return;
 
-	float3 wpos = pos+0.001 + dir * t.x; //get world position at first intersection 
+	float3 wpos = pos + dir * t.x; //get world position at first intersection 
+	wpos += dir * 0.001; // add epsilon
 
 	for (float f = t.x; f < t.y; f += stepSize) {
 
@@ -176,18 +172,13 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 		float3 offset; // brick offset
 		float3 vdel; // i.e. voxel size 
 
-
 		VDBNode* brick_node = getNodeAtPoint(gvdb, wpos + dir * stepSize , &offset, &vmin, &vdel, &nodeid);  // Check if there is a brick node ahead of us 
-		 
 
 		if (brick_node != 0x0) { //We have found a brick node in ray direction.
 
-			//clr = make_float4(1.0f, 0, 0, 1);
-			//return;
-
 			//Find the entrance and exit points in brick node   
-			float orto_len = sqrtf(vdel.x * vdel.x);												//              b.y
-			float3 b = rayBoxIntersect(wpos, dir, vmin, vmin + orto_len * gvdb->res[0]);			//          ____._____                                  
+			float diag_len = sqrtf(vdel.x * vdel.x);												//              b.y
+			float3 b = rayBoxIntersect(wpos, dir, vmin, vmin + diag_len * gvdb->res[0]);			//          ____._____                                  
 			wpos += dir * b.x;																		//		    |  /      |
 			float3 brick_pos = (wpos - vmin) / vdel;												//          | / dir   |
 			brick_pos += dir * 0.001;																//	    b.x |/        |
@@ -195,7 +186,8 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 
 			float3 atlas_pos = make_float3(brick_node->mValue);					// Atlas space position of brick node
 			
-			for (int iter = 0; iter < MAX_ITER && in_brick(gvdb, brick_pos); iter++) { // sample density in brick
+			// ray march brick
+			for (int iter = 0; iter < MAX_ITER && in_brick(gvdb, brick_pos); iter++) { 
 			
 				density += tex3D<float>(gvdb->volIn[chan], brick_pos.x + atlas_pos.x, brick_pos.y + atlas_pos.y, brick_pos.z + atlas_pos.z); //Sample density at voxel 
 				
@@ -209,56 +201,8 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 		wpos += dir * stepSize;
 		transmittance *= make_float3(exp(-density * stepSize));
 
-
-		//brick_pos += (dir * stepSize);
-
-
-
-		//// we will now dive inside brick and sample voxels 
-
-		//float3 voxel_pos = (brick_pos - vmin) / (gvdb->vdel[0]);
-		//int3 atlas_pos = child_node->mValue; // atlas position of node 
-
-		//int iter = 0;
-		//float dt = length(stepSize*dir*gvdb->vdel[0]);
-
-		//if (child_node != 0x0) {
-
-		//	for (iter = 0; iter < MAX_ITER && voxel_pos.x >= 0 && voxel_pos.y >= 0 && voxel_pos.z >= 0 && voxel_pos.x < gvdb->res[0] && voxel_pos.y < gvdb->res[0] && voxel_pos.z < gvdb->res[0]; iter++) {
-
-		//		density += tex3D<float>(gvdb->volIn[chan], voxel_pos.x + atlas_pos.x, voxel_pos.y + atlas_pos.y, voxel_pos.z + atlas_pos.z); //Sample density at voxel 
-
-		//		density *= 0.1;
-
-		//		voxel_pos += dir * stepSize;
-		//		brick_pos += dir * stepSize * gvdb->vdel[0];
-		//		f += dt;
-		//	}
-
-		//}
-
-
-
-		/*
-
-
-		for (int iter = 0; iter < MAX_ITER && p.x >= 0 && p.y >= 0 && p.z >= 0 && p.x < gvdb->res[0] && p.y < gvdb->res[0] && p.z < gvdb->res[0]; iter++) {
-
-
-			p += dir * stepSize;
-			root_pos += dir * stepSize;
-			f += length(0.1*dir*gvdb->vdel[0]);
-		}
-
-
-
-
-
-		//if (length(transmittance) < 0.1f) return;
-
-
-
-
+		//TODO: get shadow transmittance and evaluate clr by albedo and extinction coefficients  
+		/*  
 		// calculate accumulated shadow transmittance
 		float stepSizeShadow = 0.1;
 		float3 shadow = getShadowTransmittance(wpos, 1.0, stepSizeShadow, extinction);
@@ -276,7 +220,6 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 	transmittance = make_float3(fminf(fmaxf(transmittance.x, 0.001), 1.0f));
 
 	clr = make_float4(transmittance, (1- transmittance.x) * 0.1);
-
 
 }
 
