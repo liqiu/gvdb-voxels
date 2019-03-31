@@ -51,5 +51,5 @@ extern "C" __global__ void raycast_kernel ( VDBInfo* gvdb, uchar chan, uchar4* o
 	} else {
 		clr = make_float4 ( 0.0, 0.0, 0.1, 1.0 );
 	}	
-	outBuf [ y*scn.width + x ] = make_uchar4( 1*255, 1*255, 1*255, 255 );	
+	outBuf [ y*scn.width + x ] = make_uchar4( clr.x*255, clr.y*255, clr.z*255, 255 );	
 }

@@ -1,10 +1,9 @@
 
-
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 
 #include "gvdb.h"
-#include "file_png.h"
-#include "file_tga.h"
 #include "hdr_loader.h"
+#include "stb_image_write.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -53,13 +52,31 @@ public:
 	virtual void reshape(int w, int h);
 	virtual void motion(int x, int y, int dx, int dy);
 	virtual void mouse(NVPWindow::MouseButton button, NVPWindow::ButtonAction state, int mods, int x, int y);
+	virtual void keyboardchar(unsigned char key, int mods, int x, int y);
+	virtual void save_image(int w, int h);
 	//virtual bool createEnvironment(cudaTextureObject_t *env_tex, cudaArray_t *env_tex_data, const char *env_map_name);
 	int			gl_screen_tex;
 	int			mouse_down;
-
 	Vector3DF	m_pretrans, m_scale, m_angs, m_trans;
 };
 
+void Sample::save_image(int w, int h) {
+
+	printf("saving tga file");
+	unsigned char* buf = (unsigned char*)malloc(w*h * 4);
+	gvdb.ReadRenderBuf(0, buf);
+	stbi_write_tga("./render/pathtrace.tga", w, h, 4, buf);
+
+}
+
+void Sample::keyboardchar(unsigned char key, int mods, int x, int y)
+{
+	switch (key) {
+	case 's': 
+		save_image(getWidth(),getHeight()); 
+		break;
+	};
+}
 
 bool Sample::init() {
 
@@ -91,7 +108,7 @@ bool Sample::init() {
 
 	char scnpath[1024];
 
-	if (!gvdb.FindFile("bunny.vdb", scnpath)) {
+	if (!gvdb.FindFile("dragon.vdb", scnpath)) {
 		printf("Cannot find vdb file.\n");
 		exit(-1);
 	}
@@ -107,7 +124,7 @@ bool Sample::init() {
 	// Create Camera and Light
 	Camera3D* cam = new Camera3D;
 	cam->setFov(35);
-	cam->setOrbit(Vector3DF(0, 0, 0), Vector3DF(0, 0, 5), 5, 1.0f);
+	cam->setOrbit(Vector3DF(0, 0, 0), Vector3DF(3, 2, 10), 20, 1.0f);
 	gvdb.getScene()->SetCamera(cam);
 	gvdb.getScene()->SetRes(w, h);
 
@@ -119,7 +136,6 @@ bool Sample::init() {
 	// Add render buffer 
 	printf("Creating screen buffer. %d x %d\n", w, h);
 	gvdb.AddRenderBuf(0, w, h, 4);
-
 
 	// Load custom module and kernel
 	printf("Loading module: render_custom.ptx\n");
@@ -134,6 +150,7 @@ bool Sample::init() {
 	// This is a helper func in sample utils (not part of gvdb),
 	// which creates or resizes an opengl 2D texture.
 	createScreenQuadGL(&gl_screen_tex, w, h);
+
 
 	return true;
 
@@ -205,6 +222,8 @@ void Sample::mouse(NVPWindow::MouseButton button, NVPWindow::ButtonAction state,
 	// Track when we are in a mouse drag
 	mouse_down = (state == NVPWindow::BUTTON_PRESS) ? button : -1;
 }
+
+
 
 /*
 bool Sample::createEnvironment(cudaTextureObject_t * env_tex, cudaArray_t * env_tex_data, const char * env_map_name)

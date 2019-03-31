@@ -142,7 +142,10 @@ __device__ float3 getShadowTransmittance(float3 pos, float sampledDistance, floa
 
 }
 
+__device__ bool in_brick(VDBInfo* gvdb,  float3 pos) {
 
+	return pos.x >= 0 && pos.y >= 0 && pos.z >= 0 && pos.x < gvdb->res[0] && pos.y < gvdb->res[0] && pos.z < gvdb->res[0];
+}
 __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float3& hit, float4& clr) {
 
 	float3 absorption = 10.0f * make_float3(0.75, 0.5, 0.0);
@@ -161,59 +164,87 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 	float3 t = rayBoxIntersect(pos, dir, gvdb->bmin, gvdb->bmax);
 	if (t.z == NOHIT) return;
 
-	float3 vmin;
-	float3 vdel;
-	int lev = gvdb->top_lev;
-	VDBNode* node = getNode(gvdb, lev, 0, &vmin); // get root node
-	float3 wpos = pos + dir * t.x; //get world position at first intersection 
-	float3 brick_pos = (wpos - vmin) / (gvdb->vdel[lev] * 0.333333f); // get position relative to root node
-
-	brick_pos -= dir * 1.00001;
-	uint64 nodeid;
-	float3 offset;
+	float3 wpos = pos+0.001 + dir * t.x; //get world position at first intersection 
 
 	for (float f = t.x; f < t.y; f += stepSize) {
 
-		if (density > 100.0f) continue;
+		if (transmittance.x < 0.1f) break; // no need to trace further
+
+		//brick node variables 
+		float3 vmin; //root pos of brick node
+		uint64 nodeid; // brick id 
+		float3 offset; // brick offset
+		float3 vdel; // i.e. voxel size 
 
 
-		VDBNode* child_node = getNodeAtPoint(gvdb, brick_pos, &offset, &vmin, &vdel, &nodeid);
-		
-		brick_pos += (dir * stepSize);
+		VDBNode* brick_node = getNodeAtPoint(gvdb, wpos + dir * stepSize , &offset, &vmin, &vdel, &nodeid);  // Check if there is a brick node ahead of us 
+		 
 
+		if (brick_node != 0x0) { //We have found a brick node in ray direction.
 
+			//clr = make_float4(1.0f, 0, 0, 1);
+			//return;
 
-		// we will now dive inside brick and sample voxels 
+			//Find the entrance and exit points in brick node   
+			float orto_len = sqrtf(vdel.x * vdel.x);												//              b.y
+			float3 b = rayBoxIntersect(wpos, dir, vmin, vmin + orto_len * gvdb->res[0]);			//          ____._____                                  
+			wpos += dir * b.x;																		//		    |  /      |
+			float3 brick_pos = (wpos - vmin) / vdel;												//          | / dir   |
+			brick_pos += dir * 0.001;																//	    b.x |/        |
+																									//          |_________|
 
-		float3 voxel_pos = (brick_pos - vmin) / (gvdb->vdel[0]);
-		int3 atlas_pos = child_node->mValue; // atlas position of node 
-
-		int iter = 0;
-		float dt = length(stepSize*dir*gvdb->vdel[0]);
-
-		if (child_node != 0x0) {
-
-			for (iter = 0; iter < MAX_ITER && voxel_pos.x >= 0 && voxel_pos.y >= 0 && voxel_pos.z >= 0 && voxel_pos.x < gvdb->res[0] && voxel_pos.y < gvdb->res[0] && voxel_pos.z < gvdb->res[0]; iter++) {
-
-				density += tex3D<float>(gvdb->volIn[chan], voxel_pos.x + atlas_pos.x, voxel_pos.y + atlas_pos.y, voxel_pos.z + atlas_pos.z); //Sample density at voxel 
+			float3 atlas_pos = make_float3(brick_node->mValue);					// Atlas space position of brick node
+			
+			for (int iter = 0; iter < MAX_ITER && in_brick(gvdb, brick_pos); iter++) { // sample density in brick
+			
+				density += tex3D<float>(gvdb->volIn[chan], brick_pos.x + atlas_pos.x, brick_pos.y + atlas_pos.y, brick_pos.z + atlas_pos.z); //Sample density at voxel 
 				
-				density *= 0.1;
-				
-				voxel_pos += dir * stepSize;
-				brick_pos += dir * stepSize * gvdb->vdel[0];
-				f += dt;
+				brick_pos += dir * stepSize;
+				wpos += dir * stepSize * vdel;
 			}
+			density *= vdel.x;
+			
 
 		}
+		wpos += dir * stepSize;
+		transmittance *= make_float3(exp(-density * stepSize));
 
-		transmittance *= make_float3(exp(-density));
+
+		//brick_pos += (dir * stepSize);
+
+
+
+		//// we will now dive inside brick and sample voxels 
+
+		//float3 voxel_pos = (brick_pos - vmin) / (gvdb->vdel[0]);
+		//int3 atlas_pos = child_node->mValue; // atlas position of node 
+
+		//int iter = 0;
+		//float dt = length(stepSize*dir*gvdb->vdel[0]);
+
+		//if (child_node != 0x0) {
+
+		//	for (iter = 0; iter < MAX_ITER && voxel_pos.x >= 0 && voxel_pos.y >= 0 && voxel_pos.z >= 0 && voxel_pos.x < gvdb->res[0] && voxel_pos.y < gvdb->res[0] && voxel_pos.z < gvdb->res[0]; iter++) {
+
+		//		density += tex3D<float>(gvdb->volIn[chan], voxel_pos.x + atlas_pos.x, voxel_pos.y + atlas_pos.y, voxel_pos.z + atlas_pos.z); //Sample density at voxel 
+
+		//		density *= 0.1;
+
+		//		voxel_pos += dir * stepSize;
+		//		brick_pos += dir * stepSize * gvdb->vdel[0];
+		//		f += dt;
+		//	}
+
+		//}
+
+
 
 		/*
 
 
 		for (int iter = 0; iter < MAX_ITER && p.x >= 0 && p.y >= 0 && p.z >= 0 && p.x < gvdb->res[0] && p.y < gvdb->res[0] && p.z < gvdb->res[0]; iter++) {
 
-			
+
 			p += dir * stepSize;
 			root_pos += dir * stepSize;
 			f += length(0.1*dir*gvdb->vdel[0]);
@@ -222,7 +253,7 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 
 
 
-		
+
 		//if (length(transmittance) < 0.1f) return;
 
 
@@ -242,9 +273,9 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 		*/
 
 	}
+	transmittance = make_float3(fminf(fmaxf(transmittance.x, 0.001), 1.0f));
 
-	
-	clr = make_float4(transmittance,1.0f);
+	clr = make_float4(transmittance, (1- transmittance.x) * 0.1);
 
 
 }
@@ -260,11 +291,11 @@ extern "C" __global__ void pathTrace(VDBInfo* gvdb, uchar chan, uchar4* outBuf) 
 
 	float3 rdir = normalize(getViewRay((float(x) + 0.5) / scn.width, (float(y) + 0.5) / scn.height));
 	float3 hit = make_float3(NOHIT, NOHIT, NOHIT);
-	float4 clr = make_float4(1.0f, 1.0f, 1.0f, 0.0f);
+	float4 clr = make_float4(1.0f, 1.0f, 1.0f, 1.0f);
 
 	RayCast(gvdb, chan, scn.campos, rdir, hit, clr);
 
-	outBuf[y*scn.width + x] = make_uchar4(clr.x * 255, clr.y * 255, clr.z * 255, 1);
+	outBuf[y*scn.width + x] = make_uchar4(clr.x * 255, clr.y * 255, clr.z * 255 , 255);
 
 
 }
