@@ -124,7 +124,7 @@ bool Sample::init() {
 	// Create Camera and Light
 	Camera3D* cam = new Camera3D;
 	cam->setFov(35);
-	cam->setOrbit(Vector3DF(0, 0, 0), Vector3DF(3, 2, 10), 20, 1.0f);
+	cam->setOrbit(Vector3DF(0, 0, 0), Vector3DF(3, 2, 10), 10, 1.0f);
 	gvdb.getScene()->SetCamera(cam);
 	gvdb.getScene()->SetRes(w, h);
 
