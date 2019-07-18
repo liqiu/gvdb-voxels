@@ -5,6 +5,7 @@
 #include "hdr_loader.h"
 #include "stb_image_write.h"
 
+
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -53,19 +54,30 @@ public:
 	virtual void motion(int x, int y, int dx, int dy);
 	virtual void mouse(NVPWindow::MouseButton button, NVPWindow::ButtonAction state, int mods, int x, int y);
 	virtual void keyboardchar(unsigned char key, int mods, int x, int y);
-	virtual void save_image(int w, int h);
+	virtual void save_image();
 	//virtual bool createEnvironment(cudaTextureObject_t *env_tex, cudaArray_t *env_tex_data, const char *env_map_name);
 	int			gl_screen_tex;
 	int			mouse_down;
+	int			frame_number;
+	bool		save_images;
 	Vector3DF	m_pretrans, m_scale, m_angs, m_trans;
 };
 
-void Sample::save_image(int w, int h) {
-
-	printf("saving tga file");
+void Sample::save_image() {
+	int w = getWidth();
+	int h = getHeight();
+	
 	unsigned char* buf = (unsigned char*)malloc(w*h * 4);
+	
 	gvdb.ReadRenderBuf(0, buf);
-	stbi_write_tga("./render/pathtrace.tga", w, h, 4, buf);
+	
+	char frame_string[100];
+	sprintf(frame_string, "%d", frame_number);
+	char file_name[100] = "./render/pathtrace.";
+	strcat(file_name, frame_string);
+	strcat(file_name, ".tga");
+	
+	stbi_write_tga(file_name, w, h, 4, buf);
 
 }
 
@@ -73,7 +85,7 @@ void Sample::keyboardchar(unsigned char key, int mods, int x, int y)
 {
 	switch (key) {
 	case 's': 
-		save_image(getWidth(),getHeight()); 
+		save_images = !save_images;
 		break;
 	};
 }
@@ -83,10 +95,13 @@ bool Sample::init() {
 	int w = getWidth(), h = getHeight();			// window width & height
 	mouse_down = -1;
 	gl_screen_tex = -1;
-	m_pretrans.Set(-125, -160, -125);
+	m_pretrans.Set(0, 0, 0);
 	m_scale.Set(1, 1, 1);
 	m_angs.Set(0, 0, 0);
 	m_trans.Set(0, 0, 0);
+
+	frame_number = 0; 
+	save_images = false;
 
 	/*
 	//Create environment texture
@@ -116,7 +131,7 @@ bool Sample::init() {
 	gvdb.LoadVDB(scnpath);
 	gvdb.Measure(true);
 
-	gvdb.SetTransform(Vector3DF(0, 90, 0), Vector3DF(1, 1, 1), Vector3DF(0, 0, 0), Vector3DF(0, 0, 0));
+	gvdb.SetTransform(m_pretrans, m_scale, m_angs, m_trans);
 
 	gvdb.getScene()->SetVolumeRange(0.1f, 0.0f, 1.0f);
 	gvdb.getScene()->SetBackgroundClr(0.1f, 0.2f, 0.4f, 1.0);
@@ -124,7 +139,7 @@ bool Sample::init() {
 	// Create Camera and Light
 	Camera3D* cam = new Camera3D;
 	cam->setFov(35);
-	cam->setOrbit(Vector3DF(0, 0, 0), Vector3DF(3, 2, 10), 10, 1.0f);
+	cam->setOrbit(Vector3DF(-40, 0, 0), Vector3DF(0, 0, 0), 100, 1.0);
 	gvdb.getScene()->SetCamera(cam);
 	gvdb.getScene()->SetRes(w, h);
 
@@ -171,9 +186,21 @@ void Sample::reshape(int w, int h)
 
 void Sample::display()
 {
+	Camera3D* cam = gvdb.getScene()->getCamera();
+	Vector3DF angs = cam->getAng();
+	angs.x +=  2.0f;
+	cam->setOrbit(angs, cam->getToPos(), cam->getOrbitDist(), cam->getDolly());
+
+	if (save_images) {
+
+		frame_number++;
+		save_image();
+
+	}
+
 	gvdb.RenderKernel(cuRaycastKernel, 0, 0);
 	//gvdb.Render(SHADE_VOLUME, 0, 0);
-	// Copy render buffer into opengl texture
+
 	// This function does a gpu-gpu device copy from the gvdb cuda output buffer
 	// into the opengl texture, avoiding the cpu readback found in ReadRenderBuf
 	gvdb.ReadRenderTexGL(0, gl_screen_tex);

@@ -29,7 +29,6 @@
 #include <cuda_runtime.h> 
 #include <curand_kernel.h>
 
-
 typedef unsigned char		uchar;
 typedef unsigned int		uint;
 typedef unsigned short		ushort;
@@ -72,6 +71,11 @@ __device__ bool in_brick(VDBInfo* gvdb, float3 pos) {
 
 	return pos.x >= 0 && pos.y >= 0 && pos.z >= 0 && pos.x < gvdb->res[0] && pos.y < gvdb->res[0] && pos.z < gvdb->res[0];
 }
+__device__ bool in_volume_bbox(VDBInfo* gvdb, float3 pos) {
+
+	return pos.x >= gvdb->bmin.x && pos.y >= gvdb->bmin.y && pos.z >= gvdb->bmin.z && pos.x < gvdb->bmax.x && pos.y < gvdb->bmax.y && pos.z < gvdb->bmax.z;
+}
+
 #define EPSTEST(a,b,c)	(a>b-c && a<b+c)
 #define VOXEL_EPS	0.0001
 
@@ -130,10 +134,7 @@ __device__ float3 getShadowTransmittance(VDBInfo *gvdb, uchar chan, float3 pos, 
 	float3 shadow = make_float3(1.0f);
 	float3 Ldir = normalize(scn.light_pos - pos);
 
-	float3 s = rayBoxIntersect(pos, Ldir, gvdb->bmin, gvdb->bmax);
-
-
-	for (float tshadow = 0.0f; tshadow < s.y ; tshadow += stepSizeShadow) {
+	while (in_volume_bbox(gvdb, pos)) { // we always start inside volume bbox
 
 		float densityShadow = 0.0f;
 
@@ -143,35 +144,18 @@ __device__ float3 getShadowTransmittance(VDBInfo *gvdb, uchar chan, float3 pos, 
 		float3 offset; // brick offset
 		float3 vdel; // i.e. voxel size 
 
-		VDBNode* brick_node = getNodeAtPoint(gvdb, pos + Ldir * tshadow, &offset, &vmin, &vdel, &nodeid);  // Check if there is a brick node ahead of us 
+		VDBNode* brick_node = getNodeAtPoint(gvdb, pos, &offset, &vmin, &vdel, &nodeid);  // Check if there is a brick node ahead of us 
 
 		if (brick_node != 0x0) { //We have found a brick node in ray direction.
-		
-		//Find the entrance and exit points in brick node   
-			float diag_len = sqrtf(vdel.x * vdel.x);												//              b.y
-			float3 b = rayBoxIntersect(pos, Ldir, vmin, vmin + diag_len * gvdb->res[0]);			//          ____._____                                  
-			pos += Ldir * b.x;																		//		    |  /      |
-			float3 brick_pos = (pos - vmin) / vdel;													//          | / dir   |
-			brick_pos += Ldir * 0.001;																//	    b.x |/        |
-																									//          |_________|
 
+			float3 brick_pos = (pos - vmin) / vdel;
 			float3 atlas_pos = make_float3(brick_node->mValue);					// Atlas space position of brick node
-		
-		
-			for (int iter = 0; iter < MAX_ITER && in_brick(gvdb, brick_pos); iter++) {
-
-				densityShadow += tex3D<float>(gvdb->volIn[chan], brick_pos.x + atlas_pos.x, brick_pos.y + atlas_pos.y, brick_pos.z + atlas_pos.z); //Sample density at voxel 
-
-				brick_pos += Ldir * stepSizeShadow;
-				pos += Ldir * stepSizeShadow * vdel;
-			}
-			pos += Ldir * stepSizeShadow;
-
-			shadow *= exp(-densityShadow  * stepSizeShadow);
-
+			densityShadow = tex3D<float>(gvdb->volIn[chan], brick_pos.x + atlas_pos.x, brick_pos.y + atlas_pos.y, brick_pos.z + atlas_pos.z); //Sample density at voxel
+			shadow *= exp3(-densityShadow * extinction *stepSizeShadow);
 		}
 
-		
+		pos += Ldir * stepSizeShadow;
+
 	}
 
 	return shadow;
@@ -181,8 +165,8 @@ __device__ float3 getShadowTransmittance(VDBInfo *gvdb, uchar chan, float3 pos, 
 
 __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float3& hit, float4& clr) {
 
-	float3 absorption = 10.0f * make_float3(0.75, 0.5, 0.0);
-	float3 scattering = 1.0f * make_float3(0.25, 0.5, 1.0);
+	float3 absorption = 0.01f * make_float3(0.75, 0.5, 0.0);
+	float3 scattering = 10.0f * make_float3(0.25, 0.5, 1.0);
 	float3 extinction = absorption + scattering;
 
 
@@ -190,8 +174,7 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 	float3 transmittance = make_float3(1.0f);
 	float3 L = make_float3(.2f, .2f, .2f); // Light color
 	float3 color = make_float3(1.0f, 1.0f, 1.0f);
-	float stepSize = 0.1f;
-	float stepSizeShadow = 0.1;
+	float stepSize = 0.05f;
 
 	float3 t = rayBoxIntersect(pos, dir, gvdb->bmin, gvdb->bmax);
 	if (t.z == NOHIT) return;
@@ -209,52 +192,36 @@ __device__ void RayCast(VDBInfo* gvdb, uchar chan, float3 pos, float3 dir, float
 		float3 offset; // brick offset
 		float3 vdel; // i.e. voxel size 
 
-		VDBNode* brick_node = getNodeAtPoint(gvdb, wpos + dir * stepSize , &offset, &vmin, &vdel, &nodeid);  // Check if there is a brick node ahead of us 
-
-
+		VDBNode* brick_node = getNodeAtPoint(gvdb, wpos , &offset, &vmin, &vdel, &nodeid);  // Check if there is a brick node ahead of us 
 
 		if (brick_node != 0x0) { //We have found a brick node in ray direction.
+																		
+			float3 brick_pos = (wpos - vmin) / vdel;												
+			float3 atlas_pos = make_float3(brick_node->mValue);										
+			float  density = tex3D<float>(gvdb->volIn[chan], brick_pos.x + atlas_pos.x, brick_pos.y + atlas_pos.y, brick_pos.z + atlas_pos.z) * 10; //Sample density at voxel 
+			
+			// Get Light visibility																																   
+			shadow_transmittance = getShadowTransmittance(gvdb, chan, wpos, stepSize, extinction);
+			
+			//Update transmittance and scattering
+			scatteredLuminance += shadow_transmittance * transmittance * density * scattering * stepSize * L;
+			transmittance *= make_float3(exp(-density * stepSize));
 
-			//Find the entrance and exit points in brick node   
-			float diag_len = sqrtf(vdel.x * vdel.x);												//              b.y
-			float3 b = rayBoxIntersect(wpos, dir, vmin, vmin + diag_len * gvdb->res[0]);			//          ____._____                                  
-			wpos += dir * b.x;																		//		    |  /      |
-			float3 brick_pos = (wpos - vmin) / vdel;												//          | / dir   |
-			brick_pos += dir * 0.001;																//	    b.x |/        |
-																									//          |_________|
 
+			color = transmittance * color + scatteredLuminance;
 
-
-			float3 atlas_pos = make_float3(brick_node->mValue);										// Atlas space position of brick node
-
-			// ray march brick
-			while (in_brick(gvdb, brick_pos)) { 
-
-				float density = tex3D<float>(gvdb->volIn[chan], brick_pos.x + atlas_pos.x, brick_pos.y + atlas_pos.y, brick_pos.z + atlas_pos.z); //Sample density at voxel 
-				
-				// Get Light visibility
-				//shadow_transmittance = getShadowTransmittance(gvdb, chan, wpos, stepSizeShadow, extinction);
-				
-				//Update transmittance and scattering
-				scatteredLuminance += shadow_transmittance * transmittance * density * scattering * stepSize * L;
-				transmittance *= make_float3(exp(-density * stepSize));
-				brick_pos += dir * stepSize;
-				wpos += dir * stepSize * vdel;
-
-			}
+			color.x = fminf(color.x, 1.0f);
+			color.y = fminf(color.y, 1.0f);
+			color.z = fminf(color.z, 1.0f);
+			
 		}
 		wpos += dir * stepSize;
-		
-
 	}
-
-	color = transmittance * color + scatteredLuminance;
-
-	color.x = fminf(color.x, 1.0f);
-	color.y = fminf(color.y, 1.0f);
-	color.z = fminf(color.z, 1.0f);
+	
+	color = (1 - transmittance.x) * color;
 
 	clr = make_float4(color, (1 - transmittance.x));
+	
 }
 
 
@@ -273,5 +240,7 @@ extern "C" __global__ void pathTrace(VDBInfo* gvdb, uchar chan, uchar4* outBuf) 
 
 	outBuf[y*scn.width + x] = make_uchar4(clr.x * 255, clr.y * 255, clr.z * 255 , 255);
 
-
 }
+
+
+extern "C" __global__ void path(VDBInfo *gvdb){}
