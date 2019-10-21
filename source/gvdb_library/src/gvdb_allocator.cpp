@@ -29,6 +29,10 @@
 #	include <windows.h>
 #endif
 
+#if defined(CUDA_GVDB_COPYDATA_PTX)
+#define CUDA_GVDB_COPYDATA_PTX "./cuda_gvdb_copydata.ptx"
+#endif
+
 #include <cstdlib>
 #include <cuda_runtime.h>
 #include <cuda.h>
