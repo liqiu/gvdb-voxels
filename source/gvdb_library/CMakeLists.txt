@@ -130,13 +130,13 @@ list( APPEND ALL_SOURCE_FILES ${PACKAGE_SOURCE_FILES} )
 # Definitions
 add_definitions(-DGVDB_EXPORTS)					# Export dll symbols
 
-<<<<<<< HEAD
+
 add_definitions(-DCUDA_GVDB_MODULE_PTX="./cuda_gvdb_module.ptx")
 message ( STATUS "CUDA_GVDB_MODULE_PTX: ./cuda_gvdb_module.ptx" )
-=======
+
 add_definitions(-DCUDA_GVDB_MODULE_PATH="${LIB_INSTALL_PATH}")
 message ( STATUS "CUDA_GVDB_MODULE_PATH: ${LIB_INSTALL_PATH}" )
->>>>>>> upstream/master
+
 
 
 # Set the library type
@@ -176,7 +176,7 @@ message ( STATUS "Share:   ${SHARE_PATH}" )
 #####################################################################################
 # Linkage
 #
-_LINK ( PROJECT ${PROJNAME} OPT ${LIBRARIES_OPTIMIZED} DEBUG ${LIBRARIES_DEBUG} PLATFORM ${PLATFORM_LIBRARIES} )
+_LINK ( PROJECT ${PROJNAME} OPT ${LIBRARIES_OPTIMIZED} DEBUG ${LIBRARIES_DEBUG} )
 
 ################################################################
 # Windows specific
